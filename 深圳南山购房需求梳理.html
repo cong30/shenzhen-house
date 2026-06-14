@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>深圳南山购房需求梳理</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; background: #F0F2F5; color: #333; line-height: 1.7; }
+.container { max-width: 720px; margin: 0 auto; background: #fff; min-height: 100vh; }
+
+.header { background: linear-gradient(135deg, #1A3A5C, #2C6E91); padding: 32px 24px; color: #fff; position: relative; overflow: hidden; }
+.header::after { content: ''; position: absolute; top: -30px; right: -30px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.06); }
+.header h1 { font-size: 24px; margin-bottom: 4px; letter-spacing: 1px; }
+.header .sub { font-size: 13px; opacity: 0.75; }
+.header .date { font-size: 12px; opacity: 0.6; margin-top: 8px; }
+
+.section { padding: 20px; border-bottom: 8px solid #F0F2F5; }
+.section:last-child { border-bottom: none; }
+.section-title { font-size: 17px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.section-title .icon { font-size: 20px; }
+
+.req-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.req-card { background: #F7F9FC; border-radius: 10px; padding: 14px; border-left: 3px solid #2C6E91; }
+.req-card .label { font-size: 12px; color: #999; margin-bottom: 4px; }
+.req-card .value { font-size: 15px; font-weight: 600; color: #1A3A5C; }
+.req-card.full { grid-column: 1 / -1; }
+
+.metro-line { position: relative; padding: 10px 0 10px 40px; }
+.metro-line::before { content: ''; position: absolute; left: 18px; top: 0; bottom: 0; width: 4px; background: linear-gradient(to bottom, #2C6E91, #5BA3D9); border-radius: 2px; }
+.metro-station { position: relative; padding: 10px 12px; margin-bottom: 6px; border-radius: 8px; transition: all 0.2s; }
+.metro-station::before { content: ''; position: absolute; left: -30px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 3px solid #2C6E91; z-index: 1; }
+.metro-station.in-range { background: #E8F4FD; }
+.metro-station.in-range::before { background: #2C6E91; border-color: #1A3A5C; }
+.metro-station.work::before { background: #E74C3C; border-color: #C0392B; width: 14px; height: 14px; left: -31px; }
+.metro-station.out-range { opacity: 0.45; }
+.metro-station.out-range::before { border-color: #bbb; }
+.station-name { font-size: 14px; font-weight: 600; }
+.station-info { font-size: 11px; color: #888; margin-top: 2px; }
+.station-time { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #2C6E91; font-weight: 600; }
+.metro-station.out-range .station-time { color: #bbb; }
+.work-badge { background: #E74C3C; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle; }
+.in-badge { background: #27AE60; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: 4px; }
+.transfer-badge { background: #F39C12; color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+
+/* 地图容器 */
+#map { height: 380px; border-radius: 12px; margin-bottom: 16px; z-index: 1; }
+.map-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: #888; margin-top: 8px; }
+.map-legend span { display: flex; align-items: center; gap: 4px; }
+.map-legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot-work { background: #E74C3C; }
+.dot-community { background: #2C6E91; }
+
+.community-card { background: #fff; border: 1px solid #E8ECF0; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.community-card .top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.community-card .name { font-size: 16px; font-weight: 700; color: #1A3A5C; }
+.community-card .num { font-size: 22px; font-weight: 800; color: #2C6E91; opacity: 0.12; position: absolute; right: 16px; top: 10px; }
+.community-card .price-tag { background: linear-gradient(135deg, #E74C3C, #C0392B); color: #fff; border-radius: 6px; padding: 3px 10px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.community-card .meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.community-card .tag { background: #F0F7FF; color: #2C6E91; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+.community-card .tag.green { background: #E8F8F0; color: #27AE60; }
+.community-card .tag.orange { background: #FFF8E1; color: #E67E22; }
+.community-card .tag.purple { background: #F5F0FF; color: #8E44AD; }
+.community-card .desc { font-size: 13px; color: #666; line-height: 1.7; margin-top: 6px; }
+.community-card .pros-cons { display: flex; gap: 12px; margin-top: 8px; }
+.community-card .pros, .community-card .cons { flex: 1; font-size: 12px; }
+.community-card .pros { color: #27AE60; }
+.community-card .cons { color: #E67E22; }
+.community-card .pros b, .community-card .cons b { display: block; margin-bottom: 2px; font-size: 12px; }
+.comm-pos { position: relative; }
+
+.comp-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.comp-table th { background: #2C6E91; color: #fff; padding: 8px 10px; text-align: left; font-size: 12px; }
+.comp-table td { padding: 8px 10px; border-bottom: 1px solid #ECF0F3; }
+.comp-table tr:nth-child(even) { background: #F9FBFD; }
+.comp-table .best { color: #27AE60; font-weight: 700; }
+
+.advice-box { background: linear-gradient(135deg, #FFF9E6, #FFF3CC); border-radius: 12px; padding: 18px; margin-bottom: 12px; border: 1px solid #F0D060; }
+.advice-box h4 { font-size: 14px; color: #8B6914; margin-bottom: 6px; }
+.advice-box p { font-size: 13px; color: #6B5300; line-height: 1.7; }
+.advice-box ul { font-size: 13px; color: #6B5300; line-height: 1.8; padding-left: 16px; }
+
+.alert-box { background: #FFF0F0; border: 1px solid #FFCCCC; border-radius: 10px; padding: 14px; margin-top: 12px; }
+.alert-box .title { color: #C0392B; font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+.alert-box p { font-size: 12px; color: #8B3A3A; line-height: 1.7; }
+
+.footer { text-align: center; padding: 24px 20px; color: #bbb; font-size: 11px; background: #F7F9FC; }
+
+.commute-bar { display: flex; height: 28px; border-radius: 6px; overflow: hidden; margin: 10px 0; font-size: 11px; color: #fff; font-weight: 600; }
+.commute-bar div { display: flex; align-items: center; justify-content: center; }
+.cb-walk { background: #95A5A6; min-width: 50px; }
+.cb-metro { background: #2C6E91; flex: 1; }
+.cb-walk2 { background: #95A5A6; min-width: 50px; }
+
+/* Leaflet popup 中文修复 */
+.leaflet-popup-content { font-size: 13px; line-height: 1.5; }
+.leaflet-popup-content b { color: #1A3A5C; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+    <h1>🏠 深圳南山购房需求梳理</h1>
+    <div class="sub">7号线沿线 · 桃源村通勤 ≤ 30分钟</div>
+    <div class="date">📅 整理日期：2026年6月14日</div>
+</div>
+
+<!-- 核心需求 -->
+<div class="section">
+    <div class="section-title"><span class="icon">📋</span> 核心需求</div>
+    <div class="req-grid">
+        <div class="req-card">
+            <div class="label">购房区域</div>
+            <div class="value">深圳 · 南山区</div>
+        </div>
+        <div class="req-card">
+            <div class="label">户型要求</div>
+            <div class="value">三房两卫 / 四房两卫</div>
+        </div>
+        <div class="req-card">
+            <div class="label">朝向要求</div>
+            <div class="value">朝南 / 南北通透</div>
+        </div>
+        <div class="req-card">
+            <div class="label">预算范围</div>
+            <div class="value">550万 — 700万</div>
+        </div>
+        <div class="req-card">
+            <div class="label">通勤终点</div>
+            <div class="value">7号线 · 桃源村站</div>
+        </div>
+        <div class="req-card">
+            <div class="label">通勤上限</div>
+            <div class="value">≤ 30 分钟</div>
+        </div>
+        <div class="req-card full">
+            <div class="label">地铁要求</div>
+            <div class="value">必须在7号线沿线，步行至地铁站 ≤ 10分钟</div>
+        </div>
+    </div>
+    <div style="margin-top:16px;">
+        <div style="font-size:13px;color:#888;margin-bottom:4px;">30分钟通勤时间分配：</div>
+        <div class="commute-bar">
+            <div class="cb-walk" style="width:17%;">步行 5min</div>
+            <div class="cb-metro" style="width:50%;">地铁 ≤20min</div>
+            <div class="cb-walk2" style="width:17%;">步行 5min</div>
+        </div>
+        <div style="font-size:12px;color:#999;">结论：地铁乘坐 ≤ 7站（含候车），覆盖7号线 <b>西丽湖 → 车公庙</b> 共12站</div>
+    </div>
+</div>
+
+<!-- 7号线通勤范围 -->
+<div class="section">
+    <div class="section-title"><span class="icon">🚇</span> 7号线通勤范围图</div>
+    <div style="font-size:12px;color:#888;margin-bottom:10px;">
+        🟢 = 30分钟内可达 &nbsp;&nbsp; 🔴 = 工作站 &nbsp;&nbsp; ⚪ = 超出范围 &nbsp;&nbsp; 🔄 = 换乘站
+    </div>
+    <div class="metro-line">
+        <div class="metro-station out-range"><span class="station-name">深大丽湖</span><span class="station-time">~22min</span></div>
+        <div class="metro-station out-range"><span class="station-name">北大</span><span class="station-time">~20min</span></div>
+        <div class="metro-station in-range"><span class="station-name">西丽湖</span><span class="transfer-badge">🔄5号线</span><span class="station-time">~18min</span></div>
+        <div class="metro-station in-range"><span class="station-name">西丽</span><span class="in-badge">可达</span><span class="transfer-badge">🔄5/13号线</span><span class="station-time">~15min</span></div>
+        <div class="metro-station in-range"><span class="station-name">茶光</span><span class="in-badge">可达</span><span class="station-time">~13min</span></div>
+        <div class="metro-station in-range"><span class="station-name">珠光</span><span class="in-badge">可达</span><span class="station-time">~11min</span></div>
+        <div class="metro-station in-range"><span class="station-name">龙井</span><span class="in-badge">可达</span><span class="station-time">~8min</span></div>
+        <div class="metro-station in-range work"><span class="station-name">桃源村</span><span class="work-badge">📍上班</span><span class="station-time">0min</span></div>
+        <div class="metro-station in-range"><span class="station-name">深云</span><span class="in-badge">可达</span><span class="station-time">~3min</span></div>
+        <div class="metro-station in-range"><span class="station-name">安托山</span><span class="in-badge">可达</span><span class="transfer-badge">🔄2号线</span><span class="station-time">~5min</span></div>
+        <div class="metro-station in-range"><span class="station-name">农林</span><span class="in-badge">可达</span><span class="station-time">~8min</span></div>
+        <div class="metro-station in-range"><span class="station-name">车公庙</span><span class="in-badge">可达</span><span class="transfer-badge">🔄1/9/11号线</span><span class="station-time">~10min</span></div>
+        <div class="metro-station out-range"><span class="station-name">上沙</span><span class="station-time">~13min</span></div>
+        <div class="metro-station out-range"><span class="station-name">沙尾</span><span class="station-time">~15min</span></div>
+        <div class="metro-station out-range"><span class="station-name">石厦</span><span class="station-time">~17min</span></div>
+    </div>
+</div>
+
+<!-- 我关注的小区 + 地图 -->
+<div class="section">
+    <div class="section-title"><span class="icon">⭐</span> 我关注的小区（6个）</div>
+    <div style="font-size:12px;color:#888;margin-bottom:8px;">
+        📍 下方地图标注了6个小区的实际地理位置，点击标记可查看详情
+    </div>
+
+    <!-- 地图 -->
+    <div id="map"></div>
+    <div class="map-legend">
+        <span><span class="dot dot-community"></span> 关注小区</span>
+        <span><span class="dot dot-work"></span> 桃源村站（上班）</span>
+    </div>
+
+    <!-- 小区简介 -->
+    <div style="margin-top:20px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:12px;color:#1A3A5C;">小区简介</div>
+
+        <!-- 1. 天地峰景 -->
+        <div class="community-card comm-pos">
+            <div class="num">01</div>
+            <div class="top-row">
+                <div class="name">① 天地峰景</div>
+                <div class="price-tag">约550-680万</div>
+            </div>
+            <div class="meta">
+                <span class="tag green">近龙井站·约500m</span>
+                <span class="tag">约7.9万/㎡</span>
+                <span class="tag">77-102㎡ 2-3房</span>
+                <span class="tag orange">2006年建</span>
+            </div>
+            <div class="desc">位于龙珠大道38号，由深圳市天地集团开发，2006年建成。小区共<b>10栋547户</b>，绿化率达<b>45%</b>，容积率3.45，物业为深圳市天地物业管理有限公司。紧邻塘朗山脚下，周边环境清幽。距离7号线龙井站步行约7分钟、桃源村站约10分钟。主力户型77-102㎡二至三房，三房总价约550-680万。部分户型朝南看山景，但两卫户型稀缺需筛选。</div>
+            <div class="pros-cons">
+                <div class="pros"><b>✅ 优势</b>绿化率高 · 塘朗山景<br>总价友好 · 社区安静</div>
+                <div class="cons"><b>⚠️ 注意</b>步行地铁稍远<br>两卫户型少 · 2006年房龄</div>
+            </div>
+        </div>
+
+        <!-- 2. 郁金香 -->
+        <div class="community-card comm-pos">
+            <div class="num">02</div>
+            <div class="top-row">
+                <div class="name">② 郁金香家园</div>
+                <div class="price-tag">约690-800万</div>
+            </div>
+            <div class="meta">
+                <span class="tag green">桃源村站D口·206m</span>
+                <span class="tag">约8.3万/㎡</span>
+                <span class="tag">65-92㎡ 2-3房</span>
+                <span class="tag orange">2001年建</span>
+            </div>
+            <div class="desc">位于龙珠大道与龙珠六路交汇处，由深圳市广森投资开发，2001年建成。小区共<b>7栋291户</b>，物业费2.6-5元/㎡/月。距7号线<b>桃源村站D口仅206米</b>（步行2分钟），通勤极为便利。三房户型79-92㎡，总价约690-800万。链家近期成交约8.3万/㎡。周边紧邻岁宝百货、塘朗山公园、桃源中学，生活配套成熟。部分户型朝南、带阳台。</div>
+            <div class="pros-cons">
+                <div class="pros"><b>✅ 优势</b>地铁极近·206m<br>户型通透 · 配套成熟</div>
+                <div class="cons"><b>⚠️ 注意</b>房龄偏老·2001年<br>总价偏高 · 两卫需筛选</div>
+            </div>
+        </div>
+
+        <!-- 3. 城市假日 -->
+        <div class="community-card comm-pos">
+            <div class="num">03</div>
+            <div class="top-row">
+                <div class="name">③ 城市假日花园</div>
+                <div class="price-tag">约500-680万</div>
+            </div>
+            <div class="meta">
+                <span class="tag green">近龙井站·约700m</span>
+                <span class="tag">约6.7万/㎡</span>
+                <span class="tag">80-120㎡ 2-4房</span>
+                <span class="tag orange">2003年建</span>
+            </div>
+            <div class="desc">位于龙珠大道64号（塘朗山脚下），由深圳市地业房地产有限公司开发，2003年竣工。小区共<b>9栋</b>，欧式建筑风格搭配中式园林设计，居住环境优雅。距7号线龙井站步行约700米（约9分钟）、桃源村站约1km。户型涵盖80-120㎡二至四房，部分南北通透户型。均价较低（约6.7万/㎡），80㎡三房总价约500-560万，预算友好。紧邻塘朗山郊野公园，自然环境优越。</div>
+            <div class="pros-cons">
+                <div class="pros"><b>✅ 优势</b>欧式园林 · 塘朗山景<br>单价较低 · 四房可选</div>
+                <div class="cons"><b>⚠️ 注意</b>距地铁稍远<br>房龄偏老 · 放盘量少</div>
+            </div>
+        </div>
+
+        <!-- 4. 南国丽城 -->
+        <div class="community-card comm-pos">
+            <div class="num">04</div>
+            <div class="top-row">
+                <div class="name">④ 南国丽城</div>
+                <div class="price-tag">约550-680万</div>
+            </div>
+            <div class="meta">
+                <span class="tag green">西丽站·约400m</span>
+                <span class="tag">约6.4万/㎡</span>
+                <span class="tag">80-110㎡ 3-4房</span>
+                <span class="tag orange">2003年建</span>
+            </div>
+            <div class="desc">位于西丽镇中心留仙大道与沙河西路交汇处，由深圳市闽泰房地产开发。小区共<b>6栋×5单元</b>，主力户型80-110㎡三至四房，部分两梯四户设计。距7号线<b>西丽站约400米</b>（步行5分钟），距5号线西丽站约500米，双线交汇。通勤至桃源村约3站（15分钟含步行）。周边有天虹商场、悦方广场，生活配套齐全。三房两卫户型可选，总价约550-680万，性价比较高。</div>
+            <div class="pros-cons">
+                <div class="pros"><b>✅ 优势</b>5/7号线双地铁<br>西丽核心商圈 · 三房两卫</div>
+                <div class="cons"><b>⚠️ 注意</b>2003年房龄<br>部分朝向临路有噪音</div>
+            </div>
+        </div>
+
+        <!-- 5. 西湖林语 -->
+        <div class="community-card comm-pos">
+            <div class="num">05</div>
+            <div class="top-row">
+                <div class="name">⑤ 西湖林语</div>
+                <div class="price-tag">约700-850万</div>
+            </div>
+            <div class="meta">
+                <span class="tag green">西丽湖站·88m</span>
+                <span class="tag">约8.0万/㎡</span>
+                <span class="tag">90-107㎡ 3-4房</span>
+                <span class="tag orange">2006年建</span>
+            </div>
+            <div class="desc">位于丽山路16号（丽山路与丽水路交界处），由深圳市华南观赏生物开发有限公司开发，2006年建成。距7号线<b>西丽湖站仅88米</b>（步行1分钟），出门即地铁。主力户型90-107㎡三至四房，部分房源南北通透、四房大平层。通勤至桃源村约4站（18分钟含步行）。紧邻西丽湖、大学城，学术氛围浓厚。三房两卫总价约700-850万，四房约800万+，总价略超预算需关注。</div>
+            <div class="pros-cons">
+                <div class="pros"><b>✅ 优势</b>地铁口88m·极近<br>大平层户型 · 西丽湖景</div>
+                <div class="cons"><b>⚠️ 注意</b>总价偏高·超预算<br>通勤4站稍远</div>
+            </div>
+        </div>
+
+        <!-- 6. 鼎盛金域阳光世家 -->
+        <div class="community-card comm-pos">
+            <div class="num">06</div>
+            <div class="top-row">
+                <div class="name">⑥ 鼎盛金域阳光家园</div>
+                <div class="price-tag">约550-680万</div>
+            </div>
+            <div class="meta">
+                <span class="tag green">茶光站·约700m</span>
+                <span class="tag purple">新盘·准现房</span>
+                <span class="tag">87-130㎡ 3-4房</span>
+                <span class="tag">精装交付</span>
+            </div>
+            <div class="desc">位于西丽珠光北路东侧，背靠塘朗山，正对大沙河生态走廊。项目由1栋、2栋AB座共3栋组成，共<b>312套</b>，容积率约3.34。主力户型87-130㎡三至四房，南北通透，精装交付，准现房状态。距7号线茶光站约<b>700米</b>（步行约10分钟），5号线西丽站约700m。三房两卫总价约550万起、四房两卫约680万起，是<b>预算内唯一新盘</b>。通勤至桃源村约3站（18分钟含步行）。自带1500㎡商业，近天虹商场、益田假日里。</div>
+            <div class="pros-cons">
+                <div class="pros"><b>✅ 优势</b>新盘品质 · 南北通透<br>精装交付 · 大沙河生态</div>
+                <div class="cons"><b>⚠️ 注意</b>步行地铁较远<br>周边配套仍在发展中</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 横向对比表 -->
+<div class="section">
+    <div class="section-title"><span class="icon">📊</span> 6个小区横向对比</div>
+    <div style="overflow-x:auto;">
+    <table class="comp-table">
+        <thead>
+            <tr>
+                <th>小区</th>
+                <th>最近站</th>
+                <th>距地铁</th>
+                <th>通勤</th>
+                <th>户型</th>
+                <th>总价(万)</th>
+                <th>均价</th>
+                <th>房龄</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><b>天地峰景</b></td>
+                <td>龙井</td>
+                <td>~500m</td>
+                <td>2站·12min</td>
+                <td>77-102㎡</td>
+                <td>550-680</td>
+                <td>7.9万</td>
+                <td>2006</td>
+            </tr>
+            <tr>
+                <td><b>郁金香家园</b></td>
+                <td>桃源村</td>
+                <td class="best">206m</td>
+                <td class="best">0站·5min</td>
+                <td>65-92㎡</td>
+                <td>690-800</td>
+                <td>8.3万</td>
+                <td>2001</td>
+            </tr>
+            <tr>
+                <td><b>城市假日</b></td>
+                <td>龙井</td>
+                <td>~700m</td>
+                <td>2站·13min</td>
+                <td>80-120㎡</td>
+                <td>500-680</td>
+                <td>6.7万</td>
+                <td>2003</td>
+            </tr>
+            <tr>
+                <td><b>南国丽城</b></td>
+                <td>西丽</td>
+                <td>~400m</td>
+                <td>3站·15min</td>
+                <td>80-110㎡</td>
+                <td>550-680</td>
+                <td>6.4万</td>
+                <td>2003</td>
+            </tr>
+            <tr>
+                <td><b>西湖林语</b></td>
+                <td>西丽湖</td>
+                <td class="best">88m</td>
+                <td>4站·18min</td>
+                <td>90-107㎡</td>
+                <td>700-850</td>
+                <td>8.0万</td>
+                <td>2006</td>
+            </tr>
+            <tr>
+                <td><b>鼎盛金域阳光</b></td>
+                <td>茶光</td>
+                <td>~700m</td>
+                <td>3站·18min</td>
+                <td>87-130㎡</td>
+                <td>550-680</td>
+                <td>6.4万+</td>
+                <td class="best">新盘</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<!-- 决策分析 -->
+<div class="section">
+    <div class="section-title"><span class="icon">💡</span> 综合分析与建议</div>
+
+    <div class="advice-box">
+        <h4>🏆 通勤最优：郁金香家园 / 天地峰景</h4>
+        <ul>
+            <li><b>郁金香家园</b>：桃源村站D口仅206米，步行2分钟，通勤5分钟全覆盖。但总价690-800万略超预算上限，且2001年房龄最老。适合预算可微调、追求极致通勤者。</li>
+            <li><b>天地峰景</b>：近龙井站步行7分钟，通勤约12分钟。总价550-680万在预算内，绿化45%环境优秀。但两卫户型需仔细筛选。</li>
+        </ul>
+    </div>
+
+    <div class="advice-box">
+        <h4>💰 性价比之选：南国丽城 / 城市假日</h4>
+        <ul>
+            <li><b>南国丽城</b>：5/7号线双地铁，西丽站步行5分钟。均价6.4万最低，三房两卫550-680万在预算内。西丽核心商圈配套齐全。</li>
+            <li><b>城市假日</b>：塘朗山脚下欧式花园，均价6.7万低门槛，80-120㎡多户型选择。四房可选，预算友好。</li>
+        </ul>
+    </div>
+
+    <div class="advice-box">
+        <h4>🆕 品质新盘：鼎盛金域阳光家园</h4>
+        <ul>
+            <li>预算内<b>唯一新盘</b>，精装交付准现房。87-130㎡南北通透三至四房，大沙河生态走廊旁。550-680万买新盘在南山稀缺。通勤18分钟可接受。</li>
+        </ul>
+    </div>
+
+    <div class="advice-box">
+        <h4>⚖️ 西湖林语：地段极佳但总价偏高</h4>
+        <ul>
+            <li>距西丽湖站仅88米，地铁口物业。三房两卫700万起、四房800万+，超出预算上限较多。适合预算可上浮至750-850万者重点考虑。</li>
+        </ul>
+    </div>
+
+    <div class="advice-box">
+        <h4>⚠️ 看房重点关注</h4>
+        <ul>
+            <li><b>三房两卫</b>在南山7号线沿线非常稀缺，看房务必优先确认卫生间数量</li>
+            <li>朝南和南北通透房源更抢手，建议设置链家/贝壳实时提醒</li>
+            <li>老小区注意检查管线、外墙渗水、物业状况</li>
+            <li>当前买方市场，议价空间预计5-10%</li>
+        </ul>
+    </div>
+</div>
+
+<!-- 免责声明 -->
+<div class="section" style="border-bottom:none;">
+    <div class="alert-box">
+        <div class="title">⚠️ 免责声明</div>
+        <p>1. 房价数据来源于2026年6月公开平台（链家、贝壳、安居客、房天下等），实际成交价以签约为准。<br>
+        2. 通勤时间基于7号线正常运营测算（每站约2-3分钟），不含高峰期等车时间。<br>
+        3. 户型信息为小区常见户型，具体房源需实地确认。<br>
+        4. 地图标注点为小区大致位置，精确地址请参考各平台。<br>
+        5. 本文档仅供参考，不构成任何购房建议或承诺。</p>
+    </div>
+</div>
+
+<div class="footer">
+    📋 需求梳理 · AI辅助整理 · 2026年6月14日<br>
+    数据来源：链家、贝壳、安居客、房天下等公开平台
+</div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// 初始化地图（南山西丽区域）
+var map = L.map('map').setView([22.580, 113.975], 14);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 18
+}).addTo(map);
+
+// 桃源村站（工作地）
+var workIcon = L.divIcon({
+    className: 'custom-icon',
+    html: '<div style="background:#E74C3C;color:#fff;width:22px;height:22px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(231,76,60,0.5);text-align:center;line-height:16px;font-size:12px;">🏢</div>',
+    iconSize: [22, 22],
+    iconAnchor: [11, 11]
+});
+L.marker([22.5792, 113.9832], {icon: workIcon})
+    .bindPopup('<b>📍 桃源村站</b><br>7号线 · 上班地点<br><small>龙珠大道/龙珠六路/龙珠七路</small>')
+    .addTo(map);
+
+// 6个小区数据
+var communities = [
+    {name:'天地峰景', lat:22.5805, lng:113.9810, station:'龙井站~500m', price:'约550-680万', info:'2006年建·10栋547户·绿化45%<br>龙珠大道38号'},
+    {name:'郁金香家园', lat:22.5786, lng:113.9795, station:'桃源村D口206m', price:'约690-800万', info:'2001年建·7栋291户<br>龙珠大道与龙珠六路交汇处'},
+    {name:'城市假日花园', lat:22.5812, lng:113.9805, station:'龙井站~700m', price:'约500-680万', info:'2003年建·9栋<br>龙珠大道64号·欧式园林'},
+    {name:'南国丽城', lat:22.5825, lng:113.9640, station:'西丽站~400m', price:'约550-680万', info:'2003年建·6栋×5单元<br>留仙大道与沙河西路交汇处'},
+    {name:'西湖林语', lat:22.5910, lng:113.9680, station:'西丽湖站88m', price:'约700-850万', info:'2006年建·丽山路16号<br>大平层3-4房'},
+    {name:'鼎盛金域阳光', lat:22.5770, lng:113.9705, station:'茶光站~700m', price:'约550-680万', info:'新盘·312套·精装<br>珠光北路·大沙河生态走廊'}
+];
+
+var commIcon = L.divIcon({
+    className: 'custom-icon',
+    html: '<div style="background:#2C6E91;color:#fff;width:20px;height:20px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(44,110,145,0.5);text-align:center;line-height:16px;font-size:10px;font-weight:700;">&#9679;</div>',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
+});
+
+communities.forEach(function(c, i) {
+    var marker = L.marker([c.lat, c.lng], {icon: commIcon});
+    marker.bindPopup(
+        '<b>#' + (i+1) + ' ' + c.name + '</b><br>' +
+        '🚇 ' + c.station + '<br>' +
+        '💰 ' + c.price + '<br>' +
+        '<small>' + c.info + '</small>'
+    );
+    marker.addTo(map);
+});
+
+// 框出大致区域
+var bounds = [
+    [22.565, 113.955],
+    [22.600, 113.992]
+];
+L.rectangle(bounds, {color: '#2C6E91', weight: 2, fillOpacity: 0.05, dashArray: '8 4'}).addTo(map);
+
+map.fitBounds(bounds);
+</script>
+</body>
+</html>
